@@ -90,7 +90,13 @@ pipeline {
         always {
             // Clean up workspace and stop any Gradle daemons
             echo 'Cleaning up...'
-            bat "${env.GRADLE_WRAPPER} --stop || echo 'No Gradle daemons to stop'"
+            script {
+                try {
+                    bat "${env.GRADLE_WRAPPER} --stop"
+                } catch (Exception e) {
+                    echo 'No Gradle daemons to stop'
+                }
+            }
         }
         success {
             echo 'Custom-Fishing build succeeded!'
