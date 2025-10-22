@@ -81,6 +81,10 @@ pipeline {
             steps {
                 echo 'Packaging the project...'
                 bat "${env.GRADLE_WRAPPER} shadowJar --no-daemon"
+                
+                echo 'Final plugin JAR info:'
+                bat 'dir target\\*.jar'
+                bat 'echo Final JAR location: target\\'
             }
         }
         
@@ -102,14 +106,14 @@ pipeline {
     post {
         always {
             echo 'Cleaning up workspace...'
-            // Archive the built JARs
-            archiveArtifacts artifacts: '**/build/libs/*.jar', 
+            // Archive the final plugin JAR (main artifact)
+            archiveArtifacts artifacts: 'target/*.jar', 
                            fingerprint: true, 
-                           allowEmptyArchive: true
+                           allowEmptyArchive: false
             
-            // Archive configuration files for reference
-            archiveArtifacts artifacts: '**/src/main/resources/**/*.yml', 
-                           fingerprint: true, 
+            // Archive the resource pack if it exists
+            archiveArtifacts artifacts: 'Resource Pack for games.zip', 
+                           fingerprint: false, 
                            allowEmptyArchive: true
             
             // Stop any Gradle daemons
