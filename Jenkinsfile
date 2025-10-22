@@ -1,95 +1,118 @@
-// Declarative Jenkins pipeline for building Custom-Fishing using the Gradle wrapper
 pipeline {
     agent any
-
+    
     tools {
-        // Assumes Jenkins has a JDK installation named 'jdk21' configured in Global Tool Configuration
-        // Adjust to 'jdk17' or 'jdk11' based on your Jenkins setup and project requirements
-        jdk 'jdk21'
+        // Make sure Jenkins has JDK configured with this name
+        jdk 'jdk21'        // Adjust this to match your Jenkins JDK 21 installation name
     }
-
+    
     environment {
         // Use Gradle wrapper provided in the repo
         GRADLE_WRAPPER = './gradlew'
+        // Set Gradle options for CI
+        GRADLE_OPTS = '-Xmx1024m -Xms512m -Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
         // Set Git user for version banner functionality
         GIT_AUTHOR_NAME = 'Jenkins Build'
         GIT_AUTHOR_EMAIL = 'jenkins@build.local'
         GIT_COMMITTER_NAME = 'Jenkins Build'
         GIT_COMMITTER_EMAIL = 'jenkins@build.local'
-        // Gradle options for CI
-        GRADLE_OPTS = '-Dorg.gradle.daemon=false -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true'
+    }
+    
+    options {
+        // Keep builds for 30 days
+        buildDiscarder(logRotator(daysToKeepStr: '30', numToKeepStr: '50'))
+        // Timeout after 30 minutes
+        timeout(time: 30, unit: 'MINUTES')
+        // Add timestamps to console output
+        timestamps()
+    }
+    
+    triggers {
+        // Poll SCM every 5 minutes for changes (adjust as needed)
+        pollSCM('H/5 * * * *')
     }
 
     stages {
         stage('Checkout') {
             steps {
+                echo 'Checking out source code...'
                 checkout scm
                 // Ensure git is configured for the version banner functions
                 bat 'git config user.name "Jenkins Build" || echo "Git config already set"'
                 bat 'git config user.email "jenkins@build.local" || echo "Git config already set"'
             }
         }
-
-        stage('Validate') {
+        
+        stage('Build Info') {
             steps {
-                // Validate the Gradle wrapper and project structure
-                bat "${env.GRADLE_WRAPPER} --version"
-                bat "${env.GRADLE_WRAPPER} projects"
+                script {
+                    echo "Building branch: ${env.BRANCH_NAME}"
+                    echo "Build number: ${env.BUILD_NUMBER}"
+                    echo "Java version check:"
+                    bat 'java -version'
+                    echo "Gradle version check:"
+                    bat "${env.GRADLE_WRAPPER} --version"
+                }
             }
         }
-
+        
         stage('Clean') {
             steps {
+                echo 'Cleaning previous builds...'
                 bat "${env.GRADLE_WRAPPER} clean"
             }
         }
-
+        
+        stage('Compile') {
+            steps {
+                echo 'Compiling the project...'
+                bat "${env.GRADLE_WRAPPER} compileJava"
+            }
+        }
+        
         stage('Build') {
             steps {
-                // Run build with all subprojects. Use --no-daemon for CI stability.
+                echo 'Building the project...'
                 bat "${env.GRADLE_WRAPPER} build --no-daemon --stacktrace"
             }
         }
 
-        stage('Shadow JAR') {
+        stage('Package') {
             steps {
-                // Build the shadow JAR which is typically the main deliverable
+                echo 'Packaging the project...'
                 bat "${env.GRADLE_WRAPPER} shadowJar --no-daemon"
             }
         }
-
-        stage('Archive Artifacts') {
-            steps {
-                // Archive all JAR files and important build artifacts
-                archiveArtifacts artifacts: '**/build/libs/*.jar', fingerprint: true, allowEmptyArchive: true
-                
-                // Archive configuration files and resources if needed
-                archiveArtifacts artifacts: '**/src/main/resources/**/*.yml', fingerprint: false, allowEmptyArchive: true
-                archiveArtifacts artifacts: '**/src/main/resources/**/*.properties', fingerprint: false, allowEmptyArchive: true
-            }
-        }
-
-        stage('Publish') {
+        
+        stage('Install') {
             when {
-                // Only publish on main/master branch or release branches
                 anyOf {
-                    branch 'main'
                     branch 'master'
-                    branch 'release/*'
+                    branch 'main'
+                    branch 'develop'
                 }
             }
             steps {
-                echo 'Publishing artifacts...'
-                // Add your publish steps here (e.g., Maven, Nexus, etc.)
-                // Example: bat "${env.GRADLE_WRAPPER} publish"
+                echo 'Installing to local repository...'
+                bat "${env.GRADLE_WRAPPER} publishToMavenLocal"
             }
         }
     }
 
     post {
         always {
-            // Clean up workspace and stop any Gradle daemons
-            echo 'Cleaning up...'
+            echo 'Cleaning up workspace...'
+            // Archive the built JARs
+            archiveArtifacts artifacts: '**/build/libs/*.jar', 
+                           fingerprint: true, 
+                           allowEmptyArchive: true
+            
+            // Archive configuration files for reference
+            archiveArtifacts artifacts: '**/src/main/resources/**/*.yml', 
+                           fingerprint: true, 
+                           allowEmptyArchive: true
+            
+            // Stop any Gradle daemons
             script {
                 try {
                     bat "${env.GRADLE_WRAPPER} --stop"
@@ -98,19 +121,28 @@ pipeline {
                 }
             }
         }
+        
         success {
-            echo 'Custom-Fishing build succeeded!'
-            // Add success notifications here (Slack, Discord, etc.)
+            echo 'Build completed successfully!'
+            script {
+                if (env.BRANCH_NAME == 'master' || env.BRANCH_NAME == 'main') {
+                    echo 'Master/Main branch build succeeded - artifacts are ready for deployment'
+                }
+            }
         }
+        
         failure {
-            echo 'Custom-Fishing build failed!'
-            // Add failure notifications here
+            echo 'Build failed!'
+            // You can add notification steps here (email, Slack, etc.)
         }
+        
         unstable {
-            echo 'Custom-Fishing build is unstable!'
+            echo 'Build completed with test failures'
         }
-        changed {
-            echo 'Custom-Fishing build status changed!'
+        
+        cleanup {
+            // Clean up workspace if needed
+            deleteDir()
         }
     }
 }
