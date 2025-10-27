@@ -38,8 +38,15 @@ pipeline {
                 echo 'Checking out source code...'
                 checkout scm
                 // Ensure git is configured for the version banner functions
-                bat 'git config user.name "Jenkins Build" || echo "Git config already set"'
-                bat 'git config user.email "jenkins@build.local" || echo "Git config already set"'
+                script {
+                    if (isUnix()) {
+                        sh 'git config user.name "Jenkins Build" || echo "Git config already set"'
+                        sh 'git config user.email "jenkins@build.local" || echo "Git config already set"'
+                    } else {
+                        bat 'git config user.name "Jenkins Build" || echo "Git config already set"'
+                        bat 'git config user.email "jenkins@build.local" || echo "Git config already set"'
+                    }
+                }
             }
         }
         
@@ -49,9 +56,15 @@ pipeline {
                     echo "Building branch: ${env.BRANCH_NAME}"
                     echo "Build number: ${env.BUILD_NUMBER}"
                     echo "Java version check:"
-                    bat 'java -version'
-                    echo "Gradle version check:"
-                    bat "${env.GRADLE_WRAPPER} --version"
+                    if (isUnix()) {
+                        sh 'java -version'
+                        echo "Gradle version check:"
+                        sh "${env.GRADLE_WRAPPER} --version"
+                    } else {
+                        bat 'java -version'
+                        echo "Gradle version check:"
+                        bat "${env.GRADLE_WRAPPER} --version"
+                    }
                 }
             }
         }
@@ -59,32 +72,58 @@ pipeline {
         stage('Clean') {
             steps {
                 echo 'Cleaning previous builds...'
-                bat "${env.GRADLE_WRAPPER} clean"
+                script {
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} clean"
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} clean"
+                    }
+                }
             }
         }
         
         stage('Compile') {
             steps {
                 echo 'Compiling the project...'
-                bat "${env.GRADLE_WRAPPER} compileJava"
+                script {
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} compileJava"
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} compileJava"
+                    }
+                }
             }
         }
         
         stage('Build') {
             steps {
                 echo 'Building the project...'
-                bat "${env.GRADLE_WRAPPER} build --no-daemon --stacktrace"
+                script {
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} build --no-daemon --stacktrace"
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} build --no-daemon --stacktrace"
+                    }
+                }
             }
         }
 
         stage('Package') {
             steps {
                 echo 'Packaging the project...'
-                bat "${env.GRADLE_WRAPPER} shadowJar --no-daemon"
-                
-                echo 'Final plugin JAR info:'
-                bat 'dir target\\*.jar'
-                bat 'echo Final JAR location: target\\'
+                script {
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} shadowJar --no-daemon"
+                        echo 'Final plugin JAR info:'
+                        sh 'ls -lh target/*.jar || true'
+                        sh 'echo Final JAR location: target/'
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} shadowJar --no-daemon"
+                        echo 'Final plugin JAR info:'
+                        bat 'dir target\\*.jar'
+                        bat 'echo Final JAR location: target\\'
+                    }
+                }
             }
         }
         
@@ -98,7 +137,13 @@ pipeline {
             }
             steps {
                 echo 'Installing to local repository...'
-                bat "${env.GRADLE_WRAPPER} publishToMavenLocal"
+                script {
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} publishToMavenLocal"
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} publishToMavenLocal"
+                    }
+                }
             }
         }
     }
@@ -119,7 +164,11 @@ pipeline {
             // Stop any Gradle daemons
             script {
                 try {
-                    bat "${env.GRADLE_WRAPPER} --stop"
+                    if (isUnix()) {
+                        sh "${env.GRADLE_WRAPPER} --stop"
+                    } else {
+                        bat "${env.GRADLE_WRAPPER} --stop"
+                    }
                 } catch (Exception e) {
                     echo 'No Gradle daemons to stop'
                 }
