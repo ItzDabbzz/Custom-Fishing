@@ -50,6 +50,16 @@ pipeline {
             }
         }
         
+        stage('Prepare Gradle Wrapper') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        sh 'chmod +x ./gradlew'
+                    }
+                }
+            }
+        }
+        
         stage('Build Info') {
             steps {
                 script {
@@ -147,15 +157,6 @@ pipeline {
             }
         }
 
-        stage('Prepare Gradle Wrapper') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh 'chmod +x ./gradlew'
-                    }
-                }
-            }
-        }
     }
 
     post {
